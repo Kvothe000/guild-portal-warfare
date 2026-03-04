@@ -45,6 +45,18 @@ def update_hero_team_status(db: Session, hero_id: str, is_in_team: bool):
         db.refresh(hero)
     return hero
 
+def create_hero_skill(db: Session, hero_id: str, skill: schemas.SkillCreate):
+    """Adiciona uma habilidade ao grimório do herói específico."""
+    hero = db.query(models.Hero).filter(models.Hero.id == hero_id).first()
+    if not hero:
+        raise ValueError("Hero not found")
+        
+    db_skill = models.Skill(**skill.model_dump(), hero_id=hero_id)
+    db.add(db_skill)
+    db.commit()
+    db.refresh(db_skill)
+    return db_skill
+
 # --- GUILD CRUD ---
 def create_guild(db: Session, guild: schemas.GuildCreate):
     db_guild = models.Guild(name=guild.name)

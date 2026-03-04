@@ -2,11 +2,29 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 import datetime
+from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, get_db
 import models, schemas, crud, engine
 import json
+from routes_campaign import router as campaign_router
+from routes_arena import router as arena_router
+from routes_economy import router as economy_router
 
 app = FastAPI(title="Guild Portal Warfare API")
+
+# Setup CORS para permitir que o Frontend (Next.js) se comunique sem bloqueio
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Para desenvolvimento. Em prod, usar ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Incluindo a nova infraestrutura modular focada no End-game
+app.include_router(campaign_router, prefix="/campaign", tags=["Campaign & Idle"])
+app.include_router(arena_router, prefix="/arena", tags=["PvP Arena (1v1)"])
+app.include_router(economy_router, prefix="/economy", tags=["Economy & Gacha"])
 
 @app.get("/")
 def root():
@@ -48,6 +66,14 @@ def update_hero_team(hero_id: str, is_in_team: bool, db: Session = Depends(get_d
         return updated_hero
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/heroes/{hero_id}/skills/", response_model=schemas.SkillResponse)
+def add_skill_to_hero(hero_id: str, skill: schemas.SkillCreate, db: Session = Depends(get_db)):
+    """API para injetar skills em um Herói instanciado. Para ser usado na lógica de Summon/Gacha."""
+    try:
+        return crud.create_hero_skill(db=db, hero_id=hero_id, skill=skill)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 # --- GUILD & PORTAL ROUTES ---
 @app.post("/guilds/", response_model=schemas.GuildResponse)

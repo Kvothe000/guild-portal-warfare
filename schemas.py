@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
-from models import HeroRole, PortalRarity, BattleStatus
+from models import HeroRole, PortalRarity, BattleStatus, SkillType, EffectType
 
 # --- HERO SCHEMAS ---
 class HeroBase(BaseModel):
@@ -11,17 +11,40 @@ class HeroBase(BaseModel):
 class HeroCreate(HeroBase):
     pass
 
+# --- SKILL SCHEMAS ---
+class SkillBase(BaseModel):
+    name: str
+    skill_type: SkillType
+    cooldown: int = 0
+    energy_cost: int = 0
+    effect_type: EffectType
+    multiplier: float = 1.0
+
+class SkillCreate(SkillBase):
+    pass
+
+class SkillResponse(SkillBase):
+    id: str
+    hero_id: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 class HeroResponse(HeroBase):
     id: str
     player_id: str
     level: int
     max_hp: int
     current_hp: int
+    max_mana: int
+    current_mana: int
     attack: int
     defense: int
     speed: int
     is_in_team: bool
     created_at: datetime
+    skills: List[SkillResponse] = []
     
     class Config:
         from_attributes = True
