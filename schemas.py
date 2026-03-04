@@ -59,3 +59,31 @@ class GuildResponse(GuildBase):
     
     class Config:
         from_attributes = True
+
+# --- PORTAL SCHEMAS ---
+class PortalBase(BaseModel):
+    name: str
+    rarity: PortalRarity
+    resource_type: str
+    resource_generation_rate: int
+
+class PortalCreate(PortalBase):
+    pass
+
+class PortalResponse(PortalBase):
+    id: str
+    controlling_guild_id: Optional[str] = None
+    controlling_player_id: Optional[str] = None
+    defender_1_id: Optional[str] = None
+    defender_2_id: Optional[str] = None
+    defender_3_id: Optional[str] = None
+    last_collected_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+# --- BATTLE SCHEMAS ---
+class PortalAttackRequest(BaseModel):
+    attacker_1_id: str
+    attacker_2_id: Optional[str] = None
+    attacker_3_id: Optional[str] = None
