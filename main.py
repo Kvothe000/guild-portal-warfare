@@ -128,23 +128,7 @@ def test_battle_simulation(attacker_player_id: str, defender_player_id: str, db:
         
     result = engine.simulate_3v3_combat(atk_heroes, def_heroes)
     
-    # Salvar Batalha de teste
-    battle = models.Battle(
-        attacker_player_id=attacker_player_id,
-        defender_player_id=defender_player_id,
-        attacker_1_id=atk_heroes[0].id if len(atk_heroes) > 0 else None,
-        attacker_2_id=atk_heroes[1].id if len(atk_heroes) > 1 else None,
-        attacker_3_id=atk_heroes[2].id if len(atk_heroes) > 2 else None,
-        status=models.BattleStatus.Resolved,
-        combat_log=json.dumps(result["log"]),
-        resolved_at=datetime.datetime.utcnow()
-    )
-    
-    # Commit changes from simulation (HP decreases) and battle record
-    db.add(battle)
-    db.commit()
-    
-    return {"message": "Battle completed", "winner": result["winner"], "battle_id": battle.id, "log": result["log"]}
+    return {"message": "Battle completed", "winner": result["winner"], "battle_id": "test_env", "log": result["log"]}
 
 @app.post("/portals/{portal_id}/attack")
 def attack_portal(portal_id: str, attack_req: schemas.PortalAttackRequest, db: Session = Depends(get_db)):
