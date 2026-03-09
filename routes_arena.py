@@ -44,11 +44,13 @@ def seed_mock_teams(db: Session = Depends(get_db)):
     import uuid
 
     # Player 1 (Vanguard Chase Team)
-    p1 = models.Player(email=f"p1_{uuid.uuid4()}@test.com", username="VanguardMaster", password_hash="fake")
+    p1_uid = uuid.uuid4()
+    p1 = models.Player(email=f"p1_{p1_uid}@test.com", username=f"Vanguard_{p1_uid.hex[:6]}", password_hash="fake")
     db.add(p1)
     
     # Player 2 (Shadow/Arcane Loop Team)
-    p2 = models.Player(email=f"p2_{uuid.uuid4()}@test.com", username="ShadowLord", password_hash="fake")
+    p2_uid = uuid.uuid4()
+    p2 = models.Player(email=f"p2_{p2_uid}@test.com", username=f"Shadow_{p2_uid.hex[:6]}", password_hash="fake")
     db.add(p2)
     db.commit()
 
@@ -60,9 +62,9 @@ def seed_mock_teams(db: Session = Depends(get_db)):
         hero = models.Hero(
             player_id=player_id,
             name=template["name"],
-            role=models.HeroRole(template["role"]),
-            faction=models.HeroFaction(template["faction"]),
-            rarity=models.HeroRarity(template["rarity"]),
+            role=models.HeroRole(str(template["role"].value) if hasattr(template["role"], "value") else str(template["role"])),
+            faction=models.HeroFaction(str(template["faction"].value) if hasattr(template["faction"], "value") else str(template["faction"])),
+            rarity=models.HeroRarity(str(template["rarity"].value) if hasattr(template["rarity"], "value") else str(template["rarity"])),
             max_hp=template["base_stats"]["hp"] * 10, # Buff for longer fight
             current_hp=template["base_stats"]["hp"] * 10,
             attack=template["base_stats"]["attack"],
@@ -78,16 +80,16 @@ def seed_mock_teams(db: Session = Depends(get_db)):
             skill = models.Skill(
                 hero_id=hero.id,
                 name=skill_data["name"],
-                skill_type=models.SkillType(skill_data["type"]),
+                skill_type=models.SkillType(str(skill_data["type"].value) if hasattr(skill_data["type"], "value") else str(skill_data["type"])),
                 cooldown=skill_data.get("cooldown", 0),
                 energy_cost=skill_data.get("cost", 0),
-                effect_type=models.EffectType(skill_data["effect"]),
+                effect_type=models.EffectType(str(skill_data["effect"].value) if hasattr(skill_data["effect"], "value") else str(skill_data["effect"])),
                 multiplier=skill_data.get("multiplier", 1.0),
-                launcher_status=models.CombatStatusEffect(skill_data.get("launcher", "NoneEffect")),
-                chase_trigger=str(skill_data.get("chase_trigger", "NoneEffect")),
-                chase_effect=models.CombatStatusEffect(skill_data.get("chase_effect", "NoneEffect")),
+                launcher_status=models.CombatStatusEffect(str(skill_data.get("launcher", "NoneEffect").value) if hasattr(skill_data.get("launcher", "NoneEffect"), "value") else str(skill_data.get("launcher", "NoneEffect"))),
+                chase_trigger=str(skill_data.get("chase_trigger", "NoneEffect").value if hasattr(skill_data.get("chase_trigger", "NoneEffect"), "value") else skill_data.get("chase_trigger", "NoneEffect")),
+                chase_effect=models.CombatStatusEffect(str(skill_data.get("chase_effect", "NoneEffect").value) if hasattr(skill_data.get("chase_effect", "NoneEffect"), "value") else str(skill_data.get("chase_effect", "NoneEffect"))),
                 hit_count=skill_data.get("hit_count", 1),
-                apply_status=models.CombatStatusEffect(skill_data.get("apply_status", "NoneEffect")),
+                apply_status=models.CombatStatusEffect(str(skill_data.get("apply_status", "NoneEffect").value) if hasattr(skill_data.get("apply_status", "NoneEffect"), "value") else str(skill_data.get("apply_status", "NoneEffect"))),
                 advance_amount=skill_data.get("advance_amount", 0),
                 delay_amount=skill_data.get("delay_amount", 0),
                 max_chases_per_turn=skill_data.get("max_chases_per_turn", 1)
