@@ -77,19 +77,28 @@ def seed_mock_teams(db: Session = Depends(get_db)):
         db.flush()
 
         for skill_data in template["skills"]:
+            raw_effect = str(skill_data["effect"].value) if hasattr(skill_data["effect"], "value") else str(skill_data["effect"])
+            # Fallback for outdated Postgres ENUMs
+            if raw_effect not in ["Damage", "Heal", "Taunt", "Buff", "Debuff"]:
+                raw_effect = "Damage"
+                
+            raw_apply = str(skill_data.get("apply_status", "NoneEffect").value) if hasattr(skill_data.get("apply_status", "NoneEffect"), "value") else str(skill_data.get("apply_status", "NoneEffect"))
+            if raw_apply not in ["NoneEffect", "Knockdown", "HighFloat", "LowFloat", "Repulse"]:
+                raw_apply = "NoneEffect"
+
             skill = models.Skill(
                 hero_id=hero.id,
                 name=skill_data["name"],
                 skill_type=models.SkillType(str(skill_data["type"].value) if hasattr(skill_data["type"], "value") else str(skill_data["type"])),
                 cooldown=skill_data.get("cooldown", 0),
                 energy_cost=skill_data.get("cost", 0),
-                effect_type=models.EffectType(str(skill_data["effect"].value) if hasattr(skill_data["effect"], "value") else str(skill_data["effect"])),
+                effect_type=models.EffectType(raw_effect),
                 multiplier=skill_data.get("multiplier", 1.0),
                 launcher_status=models.CombatStatusEffect(str(skill_data.get("launcher", "NoneEffect").value) if hasattr(skill_data.get("launcher", "NoneEffect"), "value") else str(skill_data.get("launcher", "NoneEffect"))),
                 chase_trigger=str(skill_data.get("chase_trigger", "NoneEffect").value if hasattr(skill_data.get("chase_trigger", "NoneEffect"), "value") else skill_data.get("chase_trigger", "NoneEffect")),
                 chase_effect=models.CombatStatusEffect(str(skill_data.get("chase_effect", "NoneEffect").value) if hasattr(skill_data.get("chase_effect", "NoneEffect"), "value") else str(skill_data.get("chase_effect", "NoneEffect"))),
                 hit_count=skill_data.get("hit_count", 1),
-                apply_status=models.CombatStatusEffect(str(skill_data.get("apply_status", "NoneEffect").value) if hasattr(skill_data.get("apply_status", "NoneEffect"), "value") else str(skill_data.get("apply_status", "NoneEffect"))),
+                apply_status=models.CombatStatusEffect(raw_apply),
                 advance_amount=skill_data.get("advance_amount", 0),
                 delay_amount=skill_data.get("delay_amount", 0),
                 max_chases_per_turn=skill_data.get("max_chases_per_turn", 1)
