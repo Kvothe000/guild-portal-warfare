@@ -29,6 +29,7 @@ def upgrade() -> None:
     op.alter_column('skills', 'chase_trigger',
                existing_type=postgresql.ENUM('NoneEffect', 'Knockdown', 'HighFloat', 'LowFloat', 'Repulse', name='combatstatuseffect'),
                type_=sa.String(),
+               postgresql_using='chase_trigger::text',
                existing_nullable=True)
     # ### end Alembic commands ###
 
@@ -39,6 +40,7 @@ def downgrade() -> None:
     op.alter_column('skills', 'chase_trigger',
                existing_type=sa.String(),
                type_=postgresql.ENUM('NoneEffect', 'Knockdown', 'HighFloat', 'LowFloat', 'Repulse', name='combatstatuseffect'),
+               postgresql_using='chase_trigger::combatstatuseffect',
                existing_nullable=True)
     op.drop_column('skills', 'max_chases_per_turn')
     op.drop_column('skills', 'delay_amount')
