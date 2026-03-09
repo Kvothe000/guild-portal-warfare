@@ -58,9 +58,9 @@ def read_heroes_for_player(player_id: str, db: Session = Depends(get_db)):
     return crud.get_player_heroes(db=db, player_id=player_id)
 
 @app.put("/heroes/{hero_id}/team", response_model=schemas.HeroResponse)
-def update_hero_team(hero_id: str, is_in_team: bool, db: Session = Depends(get_db)):
+def update_hero_team(hero_id: str, team_slot: int = None, db: Session = Depends(get_db)):
     try:
-        updated_hero = crud.update_hero_team_status(db=db, hero_id=hero_id, is_in_team=is_in_team)
+        updated_hero = crud.update_hero_team_slot(db=db, hero_id=hero_id, team_slot=team_slot)
         if not updated_hero:
             raise HTTPException(status_code=404, detail="Hero not found")
         return updated_hero
@@ -119,9 +119,9 @@ def set_portal_defenders(portal_id: str, def_1_id: str, def_2_id: str = None, de
 # --- BATTLE ROUTES ---
 @app.post("/battles/test_simulation")
 def test_battle_simulation(attacker_player_id: str, defender_player_id: str, db: Session = Depends(get_db)):
-    # Pega o time (máx 3 heróis focados em 'is_in_team == True')
-    atk_heroes = db.query(models.Hero).filter(models.Hero.player_id == attacker_player_id, models.Hero.is_in_team == True, models.Hero.current_hp > 0).limit(3).all()
-    def_heroes = db.query(models.Hero).filter(models.Hero.player_id == defender_player_id, models.Hero.is_in_team == True, models.Hero.current_hp > 0).limit(3).all()
+    # Pega o time (máx 5 heróis focados em 'team_slot' preenchido)
+    atk_heroes = db.query(models.Hero).filter(models.Hero.player_id == attacker_player_id, models.Hero.team_slot.isnot(None), models.Hero.current_hp > 0).limit(5).all()
+    def_heroes = db.query(models.Hero).filter(models.Hero.player_id == defender_player_id, models.Hero.team_slot.isnot(None), models.Hero.current_hp > 0).limit(5).all()
     
     if len(atk_heroes) == 0 or len(def_heroes) == 0:
         raise HTTPException(status_code=400, detail="Ambass as equipes devem ter pelo menos 1 herói vivo no time ativo.")
@@ -160,7 +160,7 @@ def attack_portal(portal_id: str, attack_req: schemas.PortalAttackRequest, db: S
 
     # Fetch teams
     def get_team(p_id):
-        return db.query(models.Hero).filter(models.Hero.player_id == p_id, models.Hero.is_in_team == True, models.Hero.current_hp > 0).limit(3).all()
+        return db.query(models.Hero).filter(models.Hero.player_id == p_id, models.Hero.team_slot.isnot(None), models.Hero.current_hp > 0).limit(5).all()
 
     attacker_teams = [get_team(aid) for aid in attacker_ids]
     defender_teams = [get_team(did) for did in defender_ids]

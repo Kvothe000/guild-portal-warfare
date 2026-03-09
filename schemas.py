@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
-from models import HeroRole, PortalRarity, BattleStatus, SkillType, EffectType
+from models import HeroRole, PortalRarity, BattleStatus, SkillType, EffectType, CombatStatusEffect, HeroFaction, HeroRarity
 
 # --- HERO SCHEMAS ---
 class HeroBase(BaseModel):
@@ -19,6 +19,9 @@ class SkillBase(BaseModel):
     energy_cost: int = 0
     effect_type: EffectType
     multiplier: float = 1.0
+    launcher_status: CombatStatusEffect = CombatStatusEffect.NoneEffect
+    chase_trigger: CombatStatusEffect = CombatStatusEffect.NoneEffect
+    chase_effect: CombatStatusEffect = CombatStatusEffect.NoneEffect
 
 class SkillCreate(SkillBase):
     pass
@@ -34,6 +37,8 @@ class SkillResponse(SkillBase):
 class HeroResponse(HeroBase):
     id: str
     player_id: str
+    faction: HeroFaction
+    rarity: HeroRarity
     level: int
     max_hp: int
     current_hp: int
@@ -42,12 +47,39 @@ class HeroResponse(HeroBase):
     attack: int
     defense: int
     speed: int
-    is_in_team: bool
+    team_slot: Optional[int] = None
+    base_launcher_chance: float = 0.0
+    base_launcher_status: CombatStatusEffect = CombatStatusEffect.NoneEffect
     created_at: datetime
     skills: List[SkillResponse] = []
     
     class Config:
         from_attributes = True
+
+# --- GACHA SCHEMAS ---
+class GachaBannerResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    faction_focus: Optional[HeroFaction] = None
+    cost_amount: int
+    cost_currency: str
+    hard_pity_count: int
+    
+    class Config:
+        from_attributes = True
+
+class PlayerBannerStateResponse(BaseModel):
+    banner_id: str
+    pity_counter_sss: int
+    
+    class Config:
+        from_attributes = True
+
+class GachaPullResult(BaseModel):
+    hero: HeroResponse
+    pity_counter_sss: int
+    is_hard_pity: bool
 
 # --- PLAYER SCHEMAS ---
 class PlayerBase(BaseModel):

@@ -31,16 +31,30 @@ def create_player_hero(db: Session, hero: schemas.HeroCreate, player_id: str):
 def get_player_heroes(db: Session, player_id: str):
     return db.query(models.Hero).filter(models.Hero.player_id == player_id).all()
 
-def update_hero_team_status(db: Session, hero_id: str, is_in_team: bool):
+def update_hero_team_slot(db: Session, hero_id: str, team_slot: int = None):
     hero = db.query(models.Hero).filter(models.Hero.id == hero_id).first()
     if hero:
-        # Se for para colocar no time, verificar se o player já tem 3 no time? (Para uma API mais sólida)
-        if is_in_team:
-            current_team_count = db.query(models.Hero).filter(models.Hero.player_id == hero.player_id, models.Hero.is_in_team == True).count()
-            if current_team_count >= 3:
-                raise ValueError("Player already has 3 heroes in the team")
+        if team_slot is not None:
+            # Validação 1: O slot do Grid deve ser de 1 a 9
+            if team_slot < 1 or team_slot > 9:
+                raise ValueError("O slot do time deve ser entre 1 e 9 (Grid 3x3)")
+            
+            # Validação 2: Limite máximo de 5 heróis no time
+            current_team = db.query(models.Hero).filter(
+                models.Hero.player_id == hero.player_id, 
+                models.Hero.team_slot.isnot(None)
+            ).all()
+            
+            # Removemos da conta atual caso estejamos apenas movendo
+            other_team_members = [h for h in current_team if h.id != hero_id]
+            if len(other_team_members) >= 5:
+                raise ValueError("O limite da equipe (5 Heróis) já foi atingido.")
                 
-        hero.is_in_team = is_in_team
+            # Validação 3: Ninguém pode estar no mesmo slot
+            if any(h.team_slot == team_slot for h in other_team_members):
+                raise ValueError(f"O Slot {team_slot} já está ocupado por outro herói.")
+                
+        hero.team_slot = team_slot
         db.commit()
         db.refresh(hero)
     return hero

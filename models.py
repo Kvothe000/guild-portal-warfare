@@ -13,6 +13,35 @@ class HeroRole(enum.Enum):
     Support = "Support"
     Control = "Control"
 
+class CombatStatusEffect(enum.Enum):
+    NoneEffect = "NoneEffect"
+    Knockdown = "Knockdown"
+    HighFloat = "HighFloat"
+    LowFloat = "LowFloat"
+    Repulse = "Repulse"
+    # New CCs and DoTs
+    Stun = "Stun"
+    Silence = "Silence"
+    Blind = "Blind"
+    Root = "Root"
+    Burn = "Burn"
+    Poison = "Poison"
+    Bleed = "Bleed"
+    Shield = "Shield"
+
+class HeroFaction(enum.Enum):
+    Vanguard = "Vanguard"
+    Arcane = "Arcane"
+    Shadow = "Shadow"
+    Neutral = "Neutral"
+
+class HeroRarity(enum.Enum):
+    SSS = "SSS"
+    SS = "SS"
+    S = "S"
+    A = "A"
+    B = "B"
+
 class PortalRarity(enum.Enum):
     C = "C"
     B = "B"
@@ -34,6 +63,23 @@ class EffectType(enum.Enum):
     Heal = "Heal"
     Taunt = "Taunt"
     Buff = "Buff"
+    Debuff = "Debuff"
+    Action_Advance = "Action_Advance"
+    Action_Delay = "Action_Delay"
+    Damage_And_CC = "Damage_And_CC"
+    Damage_And_Buff = "Damage_And_Buff"
+    Taunt_And_Shield = "Taunt_And_Shield"
+    Damage_Ignore_Def = "Damage_Ignore_Def"
+    Heal_And_Shield = "Heal_And_Shield"
+    AoE_Damage_HitCombo = "AoE_Damage_HitCombo"
+    Damage_And_Debuff = "Damage_And_Debuff"
+    Damage_And_DoT = "Damage_And_DoT"
+    Damage_Multihit = "Damage_Multihit"
+    Damage_CC_Delay = "Damage_CC_Delay"
+    Damage_Heal = "Damage_Heal"
+    Sacrifice_Heal_Buff = "Sacrifice_Heal_Buff"
+    AoE_Damage_Multihit = "AoE_Damage_Multihit"
+    Summon_Clone = "Summon_Clone"
 
 # Funções utilitárias
 def generate_uuid():
@@ -68,6 +114,10 @@ class Player(Base):
     
     # FASE 7: Economia e Carteira do Jogador
     wallet = relationship("PlayerWallet", back_populates="player", uselist=False)
+    
+    # FASE 10.5: O Mestre da Guilda (Avatar / Main Character)
+    avatar = relationship("PlayerAvatar", back_populates="player", uselist=False)
+    guardian_spirits = relationship("GuardianSpirit", back_populates="player", cascade="all, delete-orphan")
 
 class Hero(Base):
     __tablename__ = "heroes"
@@ -76,6 +126,8 @@ class Hero(Base):
     player_id = Column(String, ForeignKey("players.id"))
     name = Column(String)
     role = Column(Enum(HeroRole))
+    faction = Column(Enum(HeroFaction), default=HeroFaction.Neutral)
+    rarity = Column(Enum(HeroRarity), default=HeroRarity.B)
     level = Column(Integer, default=1)
     max_hp = Column(Integer, default=100)
     current_hp = Column(Integer, default=100)
@@ -87,7 +139,13 @@ class Hero(Base):
     attack = Column(Integer, default=10)
     defense = Column(Integer, default=10)
     speed = Column(Integer, default=10)
-    is_in_team = Column(Boolean, default=False)
+    
+    # FASE 9: Grid de Batalha (Posição de 1 a 9). None significa que não está no time.
+    team_slot = Column(Integer, nullable=True)
+    
+    # FASE 9: Chase Mechanics Inatos (Basic Attack pode dar Launch)
+    base_launcher_chance = Column(Float, default=0.0)
+    base_launcher_status = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
     
     # FASE 5: Death Cooldown System (Anti-Whale Mechanic)
     # Se morto em uma Guerra de Portal, o herói recebe um timestamp futuro.
@@ -125,9 +183,73 @@ class Skill(Base):
     effect_type = Column(Enum(EffectType)) # Damage, Heal, Taunt, Buff
     multiplier = Column(Float, default=1.0) # Multiplicador Ex: 1.5 = 150% do attack stat
     
+    # FASE 9: Mecânicas de Chase e Status
+    launcher_status = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
+    chase_trigger = Column(String, default="NoneEffect") # Modificado para String para suportar "COMBO_10"
+    chase_effect = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
+    
+    # NOVAS ENGRENAGENS: Energia e Tempo
+    hit_count = Column(Integer, default=1) # Para gerar hits
+    apply_status = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
+    advance_amount = Column(Integer, default=0) # % de Turno Adiantado
+    delay_amount = Column(Integer, default=0) # % de Turno Atrasado
+    max_chases_per_turn = Column(Integer, default=1)
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     hero = relationship("Hero", back_populates="skills")
+
+# ==========================================
+# FASE 10.5: O Mestre da Guilda e Espíritos
+# ==========================================
+
+class PlayerAvatar(Base):
+    """
+    O Main Character do Jogador (Inspirado nos 5 Elementos do Naruto Online).
+    Ocupa um slot obrigatório no Grid 3x3. Sua grande vantagem é a flexibilidade:
+    A árvore de talentos pode ser trocada a qualquer momento para consertar Combos imperfeitos do Gacha.
+    """
+    __tablename__ = "player_avatars"
+    
+    player_id = Column(String, ForeignKey("players.id"), primary_key=True)
+    
+    # A "Classe" escolhida pelo jogador no início do jogo (Ex: Inquisidor do Fogo, Mago D'água)
+    avatar_class = Column(String, nullable=False) 
+    level = Column(Integer, default=1)
+    
+    # Slots de Habilidades Dinâmicas (Mapeia para IDs de habilidades estáticas predefinidas na engine)
+    active_basic_id = Column(String, nullable=True)     # O que ele faz no turno normal
+    active_ultimate_id = Column(String, nullable=True)  # A mágica poderosa
+    active_passive_1_id = Column(String, nullable=True) # Geralmente um Chase
+    active_passive_2_id = Column(String, nullable=True) # Geralmente Buff universal
+    
+    # Posição no grid (1 a 9)
+    team_slot = Column(Integer, default=5)
+    
+    player = relationship("Player", back_populates="avatar")
+
+class GuardianSpirit(Base):
+    """
+    Inspirado no sistema de Invocação (Kuchiyose). 
+    Fica fora do Tabuleiro. Se o combo do time quebrar, e ele tiver o Chase Trigger exato,
+    ele aparece na arena de forma invisível, acerta o Hit, e desaparece, provendo uma "ponte" extra.
+    """
+    __tablename__ = "guardian_spirits"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    player_id = Column(String, ForeignKey("players.id"))
+    
+    name = Column(String)
+    rarity = Column(Enum(HeroRarity), default=HeroRarity.A)
+    is_equipped = Column(Boolean, default=False)
+    
+    # A ponte mágica
+    chase_trigger = Column(Enum(CombatStatusEffect))
+    chase_effect = Column(Enum(CombatStatusEffect))
+    damage_multiplier = Column(Float, default=1.5)
+    
+    player = relationship("Player", back_populates="guardian_spirits")
+
 
 class Portal(Base):
     __tablename__ = "portals"
@@ -285,7 +407,32 @@ class PlayerWallet(Base):
     # Invocação
     summon_tickets = Column(Integer, default=0) # Tickets grátis ou ganhos em eventos
     
-    # Sistema Anti-Frustração (Pity)
-    pity_counter = Column(Integer, default=0) # Entra em cena na matemática do Roll
+    # Sistema Anti-Frustração (Pity) genérico antigo (mantido por compatibilidade)
+    pity_counter = Column(Integer, default=0) 
     
     player = relationship("Player", back_populates="wallet")
+
+class GachaBanner(Base):
+    __tablename__ = "gacha_banners"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String) # Ex: "Baú da Vanguarda"
+    description = Column(String)
+    faction_focus = Column(Enum(HeroFaction), nullable=True) # Se None, é o Baú Básico Fodder
+    cost_amount = Column(Integer, default=1)
+    cost_currency = Column(String, default="premium_aetherium") # "premium_aetherium" ou "summon_tickets"
+    hard_pity_count = Column(Integer, default=100)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class PlayerBannerState(Base):
+    __tablename__ = "player_banner_states"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    player_id = Column(String, ForeignKey("players.id"))
+    banner_id = Column(String, ForeignKey("gacha_banners.id"))
+    
+    pity_counter_sss = Column(Integer, default=0)
+    
+    player = relationship("Player")
+    banner = relationship("GachaBanner")
