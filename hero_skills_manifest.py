@@ -252,7 +252,7 @@ HERO_TEMPLATES = {
         "skills": [
             {"name": "Açoite", "type": "Basic", "cost": 0, "cooldown": 0, "effect": "Damage", "multiplier": 1.0, "launcher_chance": 0.3, "launcher": StatusEffect.KNOCKDOWN, "chase_trigger": StatusEffect.NONE, "chase_effect": StatusEffect.NONE},
             {"name": "Prisão de Ferro", "type": "Ultimate", "cost": 40, "cooldown": 4, "effect": "Damage_And_CC", "multiplier": 1.2, "launcher_chance": 1.0, "launcher": StatusEffect.LOW_FLOAT, "apply_status": StatusEffect.ROOT, "chase_trigger": StatusEffect.NONE, "chase_effect": StatusEffect.NONE},
-            {"name": "Puxão Violento", "type": "Passive", "cost": 0, "cooldown": 0, "effect": "Damage_CC_Delay", "multiplier": 0.8, "chase_trigger": StatusEffect.REPULSE, "chase_effect": StatusEffect.KNOCKDOWN, "delay_amount": 20, "chase_trigger": StatusEffect.NONE, "max_chases_per_turn": 2} # delay the target
+            {"name": "Puxão Violento", "type": "Passive", "cost": 0, "cooldown": 0, "effect": "Damage_CC_Delay", "multiplier": 0.8, "chase_trigger": StatusEffect.REPULSE, "chase_effect": StatusEffect.KNOCKDOWN, "delay_amount": 20, "max_chases_per_turn": 2}
         ]
     },
     "Thorne": {

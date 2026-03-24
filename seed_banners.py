@@ -1,5 +1,6 @@
 from database import SessionLocal
 from models import GachaBanner, HeroFaction
+import datetime
 
 def seed_banners():
     db = SessionLocal()
@@ -7,9 +8,9 @@ def seed_banners():
     # Check if already seeded
     existing = db.query(GachaBanner).first()
     if existing:
-        print("Banners already seeded.")
-        db.close()
-        return
+        print("Banners already seeded. Deletando antigos para re-semear com eventos...")
+        db.query(GachaBanner).delete()
+        db.commit()
 
     banners_to_create = [
         GachaBanner(
@@ -43,8 +44,18 @@ def seed_banners():
             cost_amount=150,
             cost_currency="premium_aetherium",
             hard_pity_count=100
+        ),
+        GachaBanner(
+            name="Festival da Chama Eterna (EVENTO)",
+            description="Um evento raro! Invoque Heróis com Drop Rate altíssimo para Pyros e Ignis. Termina em 7 dias!",
+            faction_focus=HeroFaction.Arcane, 
+            cost_amount=200,
+            cost_currency="premium_aetherium",
+            hard_pity_count=80,
+            expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
         )
     ]
+
     
     db.add_all(banners_to_create)
     db.commit()

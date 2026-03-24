@@ -1,12 +1,16 @@
-from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Enum, Boolean
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Enum, Boolean, Text
 from sqlalchemy.orm import relationship
 import uuid
 import datetime
 import enum
 from database import Base
 
-# Enums
+# =============================================================================
+# VEIL OF DOMINION — Models v2.0
+# =============================================================================
+
+# --- Enums ---
+
 class HeroRole(enum.Enum):
     Tank = "Tank"
     Carry = "Carry"
@@ -15,18 +19,21 @@ class HeroRole(enum.Enum):
 
 class CombatStatusEffect(enum.Enum):
     NoneEffect = "NoneEffect"
+    # Estados de Chase
     Knockdown = "Knockdown"
     HighFloat = "HighFloat"
     LowFloat = "LowFloat"
     Repulse = "Repulse"
-    # New CCs and DoTs
+    # CC (Crowd Control)
     Stun = "Stun"
     Silence = "Silence"
     Blind = "Blind"
     Root = "Root"
+    # DoT (Damage over Time)
     Burn = "Burn"
     Poison = "Poison"
     Bleed = "Bleed"
+    # Buff
     Shield = "Shield"
 
 class HeroFaction(enum.Enum):
@@ -81,358 +88,466 @@ class EffectType(enum.Enum):
     AoE_Damage_Multihit = "AoE_Damage_Multihit"
     Summon_Clone = "Summon_Clone"
 
-# Funções utilitárias
+class PlayerOrderClass(enum.Enum):
+    """As 5 Classes de Comandante — o Avatar jogável do jogador."""
+    FlameInquisitor = "FlameInquisitor"      # Vanguarda / Carry AoE
+    EtherChronist = "EtherChronist"          # Arcano / Control + Support
+    SpectralBlade = "SpectralBlade"          # Sombras / Assassino
+    StoneCleric = "StoneCleric"              # Vanguarda / Support + Tank
+    LunarHunter = "LunarHunter"             # Arcano / Multihit / Chase
+
+class ClanBossStatus(enum.Enum):
+    Active = "Active"
+    Defeated = "Defeated"
+
+# --- Utilitários ---
 def generate_uuid():
     return str(uuid.uuid4())
 
-class Guild(Base):
-    __tablename__ = "guilds"
-    
+
+# =============================================================================
+# CLÃS (antigo: Guildas)
+# =============================================================================
+
+class Clan(Base):
+    __tablename__ = "clans"
+
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, unique=True, index=True)
     level = Column(Integer, default=1)
     experience = Column(Integer, default=0)
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    players = relationship("Player", back_populates="guild")
+
+    # Relacionamentos
+    players = relationship("Player", back_populates="clan")
+    clan_boss_sessions = relationship("ClanBossSession", back_populates="clan")
+
+    @property
+    def max_members(self):
+        return self.level * 5
+
+
+class ClanBossSession(Base):
+    """
+    Uma sessão semanal do Boss do Clã.
+    O HP do boss é compartilhado — todos os membros atacam e o dano é acumulado.
+    """
+    __tablename__ = "clan_boss_sessions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    clan_id = Column(String, ForeignKey("clans.id"), nullable=False)
+
+    boss_name = Column(String, default="Lich Soberano de Valdris")
+    boss_max_hp = Column(Integer, default=10_000_000)
+    boss_current_hp = Column(Integer, default=10_000_000)
+    boss_level = Column(Integer, default=1)  # Aumenta a cada semana vencida
+
+    status = Column(Enum(ClanBossStatus), default=ClanBossStatus.Active)
+
+    week_start = Column(DateTime, default=datetime.datetime.utcnow)
+    week_end = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    clan = relationship("Clan", back_populates="clan_boss_sessions")
+    damage_contributions = relationship("ClanBossDamage", back_populates="session")
+
+
+class ClanBossDamage(Base):
+    """Rastreia o dano individual de cada membro ao Boss do Clã."""
+    __tablename__ = "clan_boss_damage"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("clan_boss_sessions.id"))
+    player_id = Column(String, ForeignKey("players.id"))
+
+    damage_dealt = Column(Integer, default=0)
+    attacks_used = Column(Integer, default=0)  # Max 3 por dia
+    last_attack_at = Column(DateTime, nullable=True)
+
+    session = relationship("ClanBossSession", back_populates="damage_contributions")
+    player = relationship("Player")
+
+
+# =============================================================================
+# JOGADOR
+# =============================================================================
 
 class Player(Base):
     __tablename__ = "players"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     password_hash = Column(String)
-    guild_id = Column(String, ForeignKey("guilds.id"), nullable=True)
+    clan_id = Column(String, ForeignKey("clans.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    guild = relationship("Guild", back_populates="players")
+
+    # Relacionamentos
+    clan = relationship("Clan", back_populates="players")
     heroes = relationship("Hero", back_populates="player")
-    
-    # FASE 4: Relacionamento 1:1 com o painel de progressão PvE e AFK do jogador
     progress = relationship("PlayerProgress", back_populates="player", uselist=False)
-    
-    # FASE 7: Economia e Carteira do Jogador
     wallet = relationship("PlayerWallet", back_populates="player", uselist=False)
-    
-    # FASE 10.5: O Mestre da Guilda (Avatar / Main Character)
-    avatar = relationship("PlayerAvatar", back_populates="player", uselist=False)
+
+    # O Comandante (Avatar jogável) — 1:1 com o Player
+    commander = relationship("PlayerCommander", back_populates="player", uselist=False)
     guardian_spirits = relationship("GuardianSpirit", back_populates="player", cascade="all, delete-orphan")
+    equipment_items  = relationship("Equipment", back_populates="player", foreign_keys="Equipment.player_id", cascade="all, delete-orphan")
+
+
+class PlayerCommander(Base):
+    """
+    O personagem jogável do jogador — o Comandante da Ordem.
+    Inspirado nos 5 elementos do Naruto Online, mas com identidade própria do mundo Valdris.
+    Ocupa um slot no grid 3x3. A classe pode ser trocada (com custo de Cristais),
+    mas as habilidades devem ser reaprendidas.
+    """
+    __tablename__ = "player_commanders"
+
+    player_id = Column(String, ForeignKey("players.id"), primary_key=True)
+
+    order_class = Column(Enum(PlayerOrderClass), nullable=False)
+    level = Column(Integer, default=1)
+    experience = Column(Integer, default=0)
+
+    # Slots de habilidade desbloqueados progressivamente (por level)
+    # IDs referenciam habilidades estaticas definidas no commander_skills_manifest.py
+    active_basic_id = Column(String, nullable=True)
+    active_active_id = Column(String, nullable=True)
+    active_ultimate_id = Column(String, nullable=True)
+    active_passive_id = Column(String, nullable=True)
+
+    # Posição padrão no grid (5 = centro)
+    team_slot = Column(Integer, default=5)
+
+    # Stats base (crescem por level)
+    max_hp = Column(Integer, default=2000)
+    current_hp = Column(Integer, default=2000)
+    attack = Column(Integer, default=150)
+    defense = Column(Integer, default=120)
+    speed = Column(Integer, default=110)
+
+    player = relationship("Player", back_populates="commander")
+
+
+# =============================================================================
+# HERÓIS
+# =============================================================================
 
 class Hero(Base):
     __tablename__ = "heroes"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
     player_id = Column(String, ForeignKey("players.id"))
+
     name = Column(String)
     role = Column(Enum(HeroRole))
     faction = Column(Enum(HeroFaction), default=HeroFaction.Neutral)
     rarity = Column(Enum(HeroRarity), default=HeroRarity.B)
     level = Column(Integer, default=1)
-    max_hp = Column(Integer, default=100)
-    current_hp = Column(Integer, default=100)
-    
-    # FASE 6: Mana/Energy System
+
+    # Sistema de Breakthrough (BT0 → BT6)
+    breakthrough_level = Column(Integer, default=0)
+    # Fragmentos acumulados para o próximo BT (thresholds: 10, 20, 40, 80, 150, 300)
+    breakthrough_fragments = Column(Integer, default=0)
+
+    # Stats
+    max_hp = Column(Integer, default=1000)
+    current_hp = Column(Integer, default=1000)
     max_mana = Column(Integer, default=100)
     current_mana = Column(Integer, default=0)
-    
-    attack = Column(Integer, default=10)
-    defense = Column(Integer, default=10)
-    speed = Column(Integer, default=10)
-    
-    # FASE 9: Grid de Batalha (Posição de 1 a 9). None significa que não está no time.
+    attack = Column(Integer, default=100)
+    defense = Column(Integer, default=80)
+    speed = Column(Integer, default=100)
+
+    # Posição no grid 3x3 (1-9). None = fora do time
     team_slot = Column(Integer, nullable=True)
-    
-    # FASE 9: Chase Mechanics Inatos (Basic Attack pode dar Launch)
+
+    # Mecânicas de chase inatas do Basic Attack
     base_launcher_chance = Column(Float, default=0.0)
     base_launcher_status = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
-    
-    # FASE 5: Death Cooldown System (Anti-Whale Mechanic)
-    # Se morto em uma Guerra de Portal, o herói recebe um timestamp futuro.
-    # Até esse timestamp expirar, ele não pode atacar Portais.
-    # Opcional no futuro: cobrar Cristais para reverter esse timestamp para NULL.
+
+    # Death Cooldown (Guerra de Clã — anti-whale)
     death_cooldown_until = Column(DateTime, nullable=True)
-    
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
+
     player = relationship("Player", back_populates="heroes")
     skills = relationship("Skill", back_populates="hero", cascade="all, delete-orphan")
+    equipment_items = relationship("Equipment", back_populates="hero", foreign_keys="Equipment.hero_id")
 
-# ==========================================
-# FASE 6: Sistema de Habilidades (Combat Engine)
-# ==========================================
 
 class Skill(Base):
-    """
-    Representa uma Habilidade específica pertencente a um Herói.
-    Em um Gacha em produção, isso clonaria um 'SkillTemplate' da definição do Herói base.
-    """
+    """Habilidade instanciada de um Herói (cópia do template do manifesto)."""
     __tablename__ = "skills"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
     hero_id = Column(String, ForeignKey("heroes.id"))
-    
+
     name = Column(String)
-    skill_type = Column(Enum(SkillType)) # Basic, Active, Ultimate, Passive
-    
+    skill_type = Column(Enum(SkillType))
+
     # Restrições de uso
-    cooldown = Column(Integer, default=0) # Turnos de CD
-    energy_cost = Column(Integer, default=0) # Custo para conjurar
-    
+    cooldown = Column(Integer, default=0)
+    energy_cost = Column(Integer, default=0)
+
     # Lógica de Impacto
-    effect_type = Column(Enum(EffectType)) # Damage, Heal, Taunt, Buff
-    multiplier = Column(Float, default=1.0) # Multiplicador Ex: 1.5 = 150% do attack stat
-    
-    # FASE 9: Mecânicas de Chase e Status
+    effect_type = Column(Enum(EffectType))
+    multiplier = Column(Float, default=1.0)
+
+    # Chase Mechanics
     launcher_status = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
-    chase_trigger = Column(String, default="NoneEffect") # Modificado para String para suportar "COMBO_10"
+    chase_trigger = Column(String, default="NoneEffect")  # String para suportar "COMBO_10"
     chase_effect = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
-    
-    # NOVAS ENGRENAGENS: Energia e Tempo
-    hit_count = Column(Integer, default=1) # Para gerar hits
+
+    # Mecânicas secundárias
+    hit_count = Column(Integer, default=1)
     apply_status = Column(Enum(CombatStatusEffect), default=CombatStatusEffect.NoneEffect)
-    advance_amount = Column(Integer, default=0) # % de Turno Adiantado
-    delay_amount = Column(Integer, default=0) # % de Turno Atrasado
+    advance_amount = Column(Integer, default=0)
+    delay_amount = Column(Integer, default=0)
     max_chases_per_turn = Column(Integer, default=1)
-    
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
+
     hero = relationship("Hero", back_populates="skills")
 
-# ==========================================
-# FASE 10.5: O Mestre da Guilda e Espíritos
-# ==========================================
 
-class PlayerAvatar(Base):
-    """
-    O Main Character do Jogador (Inspirado nos 5 Elementos do Naruto Online).
-    Ocupa um slot obrigatório no Grid 3x3. Sua grande vantagem é a flexibilidade:
-    A árvore de talentos pode ser trocada a qualquer momento para consertar Combos imperfeitos do Gacha.
-    """
-    __tablename__ = "player_avatars"
-    
-    player_id = Column(String, ForeignKey("players.id"), primary_key=True)
-    
-    # A "Classe" escolhida pelo jogador no início do jogo (Ex: Inquisidor do Fogo, Mago D'água)
-    avatar_class = Column(String, nullable=False) 
-    level = Column(Integer, default=1)
-    
-    # Slots de Habilidades Dinâmicas (Mapeia para IDs de habilidades estáticas predefinidas na engine)
-    active_basic_id = Column(String, nullable=True)     # O que ele faz no turno normal
-    active_ultimate_id = Column(String, nullable=True)  # A mágica poderosa
-    active_passive_1_id = Column(String, nullable=True) # Geralmente um Chase
-    active_passive_2_id = Column(String, nullable=True) # Geralmente Buff universal
-    
-    # Posição no grid (1 a 9)
-    team_slot = Column(Integer, default=5)
-    
-    player = relationship("Player", back_populates="avatar")
-
-class GuardianSpirit(Base):
-    """
-    Inspirado no sistema de Invocação (Kuchiyose). 
-    Fica fora do Tabuleiro. Se o combo do time quebrar, e ele tiver o Chase Trigger exato,
-    ele aparece na arena de forma invisível, acerta o Hit, e desaparece, provendo uma "ponte" extra.
-    """
-    __tablename__ = "guardian_spirits"
-    
-    id = Column(String, primary_key=True, default=generate_uuid)
-    player_id = Column(String, ForeignKey("players.id"))
-    
-    name = Column(String)
-    rarity = Column(Enum(HeroRarity), default=HeroRarity.A)
-    is_equipped = Column(Boolean, default=False)
-    
-    # A ponte mágica
-    chase_trigger = Column(Enum(CombatStatusEffect))
-    chase_effect = Column(Enum(CombatStatusEffect))
-    damage_multiplier = Column(Float, default=1.5)
-    
-    player = relationship("Player", back_populates="guardian_spirits")
-
+# =============================================================================
+# PORTAIS DE ÉTER
+# =============================================================================
 
 class Portal(Base):
     __tablename__ = "portals"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String)
     rarity = Column(Enum(PortalRarity))
     resource_type = Column(String)
     resource_generation_rate = Column(Integer)
-    
-    controlling_guild_id = Column(String, ForeignKey("guilds.id"), nullable=True)
+
+    # Posição no mapa de Valdris
+    map_x = Column(Float, default=0.0)
+    map_y = Column(Float, default=0.0)
+
+    controlling_clan_id = Column(String, ForeignKey("clans.id"), nullable=True)
     controlling_player_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
+
+    # Defensores (até 3 jogadores do clã controlador)
     defender_1_id = Column(String, ForeignKey("players.id"), nullable=True)
     defender_2_id = Column(String, ForeignKey("players.id"), nullable=True)
     defender_3_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
+
     last_collected_at = Column(DateTime, nullable=True)
+
 
 class Battle(Base):
     __tablename__ = "battles"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
     portal_id = Column(String, ForeignKey("portals.id"))
-    
-    attacker_guild_id = Column(String, ForeignKey("guilds.id"), nullable=True)
+
+    attacker_clan_id = Column(String, ForeignKey("clans.id"), nullable=True)
     attacker_player_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
-    defender_guild_id = Column(String, ForeignKey("guilds.id"), nullable=True)
+
+    defender_clan_id = Column(String, ForeignKey("clans.id"), nullable=True)
     defender_player_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
+
     attacker_1_id = Column(String, ForeignKey("players.id"))
     attacker_2_id = Column(String, ForeignKey("players.id"), nullable=True)
     attacker_3_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
+
     status = Column(Enum(BattleStatus), default=BattleStatus.Pending)
-    
-    winner_guild_id = Column(String, ForeignKey("guilds.id"), nullable=True)
+
+    winner_clan_id = Column(String, ForeignKey("clans.id"), nullable=True)
     winner_player_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
-    # Para SQLite usaremos String ao invés de JSONB, será serializado no Python
-    combat_log = Column(String, nullable=True)
-    
+
+    combat_log = Column(Text, nullable=True)  # JSON serializado
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
 
-# ==========================================
-# FASE 4: Sitema PvE (Campanha) e Retenção Idle
-# ==========================================
+
+# =============================================================================
+# PROGRESSÃO PvE — Campanha & AFK Farm
+# =============================================================================
 
 class CampaignStage(Base):
-    """
-    Representa uma fase fixa do modo Campanha (PvE).
-    Define quão difícil é o combate e qual a 'renda passiva' (AFK) que o jogador
-    ganha ao ter concluído esta fase. O muro de dificuldade substitui a Stamina.
-    """
+    """Fase da campanha PvE. Completar desbloqueia AFK farm naquele nível."""
     __tablename__ = "campaign_stages"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
-    # Exemplo: 101 (Mundo 1, Fase 1), 102 (Mundo 1, Fase 2)
-    stage_number = Column(Integer, unique=True, index=True) 
+    # Ex: 101 = Mundo 1 Fase 1, 312 = Mundo 3 Fase 12
+    stage_number = Column(Integer, unique=True, index=True)
     name = Column(String)
-    
-    # Multiplicador abstrato de status para os inimigos a serem gerados contra a engine
-    difficulty_modifier = Column(Integer, default=1) 
-    
-    # Renda Passiva gerada por HORA no Caixa AFK. Quanto maior a fase, melhor o farm.
+    world_number = Column(Integer, default=1)
+
+    difficulty_modifier = Column(Integer, default=1)
+
+    # Renda passiva por hora (AFK Farm)
     afk_xp_per_hour = Column(Integer, default=60)
     afk_gold_per_hour = Column(Integer, default=120)
+    afk_clan_coins_per_hour = Column(Integer, default=0)  # Fases avançadas
 
 
 class PlayerProgress(Base):
-    """
-    Uma extensão 1:1 da tabela Player. Guarda tudo relacionado ao avanço
-    matemático do jogador no tempo (Idle) e nos modos PvE. 
-    Modularizado para evitar inflar colunas ativas na tabela 'players'.
-    """
+    """Extensão 1:1 do Player com dados de progressão PvE e temporais."""
     __tablename__ = "player_progress"
-    
-    # A mesma ID do Player é a Primary Key aqui (Relação 1:1 absoluta)
+
     player_id = Column(String, ForeignKey("players.id"), primary_key=True)
-    
-    # Fase mais alta concluída (Define o teto de farm AFK atual)
-    highest_stage_number = Column(Integer, default=0) 
-    
-    # Timestamp base do Idle System (Caixa AFK). Toda a lógica matemática F2P reside aqui.
-    # Loot Retrotativo = (Now - last_afk_collection).horas * afk_rate_da_sua_highest_stage
+
+    highest_stage_number = Column(Integer, default=0)
     last_afk_collection = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Sistema de Tickets e Mecânicas Diárias Anti-Burnout (Limita mas não prende)
-    daily_sweeps_remaining = Column(Integer, default=5) # Dungeons Sweeps
-    daily_fast_rewards_remaining = Column(Integer, default=1) # Botão de resgatar 2h do AFK imediatamente grátis
-    
-    # FASE 5: Rankeada (Ladder 1v1)
-    # Pontuação ELO padrão que sobe ao vencer e cai ao perder
+
+    # Tickets de conteúdo diário
+    daily_sweeps_remaining = Column(Integer, default=5)
+    daily_fast_rewards_remaining = Column(Integer, default=1)
+    daily_boss_attacks_remaining = Column(Integer, default=3)  # Boss do Clã
+
+    # Arena ELO
     arena_points = Column(Integer, default=1000)
-    
-    # Para controlarmos os resets pontuais de servidores baseados no ciclo de 24h
+
     last_daily_reset = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Conexão de volta com a tabela Principal
+
     player = relationship("Player", back_populates="progress")
 
-# ==========================================
-# FASE 5: Arena de Honra (PvP 1v1 Rankeado)
-# ==========================================
+
+# =============================================================================
+# ARENA PvP 1v1
+# =============================================================================
 
 class ArenaMatch(Base):
-    """
-    Registro independente para partidas 1v1. 
-    A Arena é focada no ganho de pontos de vaidade (Ladder), 
-    não acionando as pesadas mecânicas de Guilda como 'Death Cooldown' ou 'Hero Lock'.
-    """
     __tablename__ = "arena_matches"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
-    
-    # O desafiante e o defensor
+
     attacker_player_id = Column(String, ForeignKey("players.id"))
     defender_player_id = Column(String, ForeignKey("players.id"))
-    
-    # Status ELO no momento em que a batalha começou (Para histórico verídico)
+
     attacker_points_before = Column(Integer)
     defender_points_before = Column(Integer)
-    
+
     winner_player_id = Column(String, ForeignKey("players.id"), nullable=True)
-    
-    # Quantos pontos ELO foram movimentados nesta partida
-    points_exchanged = Column(Integer, default=0) 
-    
-    # Serializado em string/JSONB caso SQLite/Postgres. 
-    # Guarda o mesmo formato 3v3 de engine.py
-    combat_log = Column(String, nullable=True) 
-    
+    points_exchanged = Column(Integer, default=0)
+
+    combat_log = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-# ==========================================
-# FASE 7: Economia, Moedas e Sistema de Gacha
-# ==========================================
+
+# =============================================================================
+# ECONOMIA — Carteira & Gacha
+# =============================================================================
 
 class PlayerWallet(Base):
-    """
-    Guarda 100% da parte financeira/econômica do jogador.
-    Isolada da tabela principal 'players' e do progresso para segurança (Anti-Exploit).
-    """
+    """Carteira financeira do jogador. Isolada para segurança."""
     __tablename__ = "player_wallets"
-    
+
     player_id = Column(String, ForeignKey("players.id"), primary_key=True)
-    
-    # Moedas
-    gold = Column(Integer, default=0) # Dinheiro base (Usado para Upgrades de Level)
-    crystals_premium = Column(Integer, default=0) # Moeda premium/Real money (Gacha e Skips)
-    guild_coins = Column(Integer, default=0) # Farma nas guerras e usa na Loja da Guilda
-    
-    # Invocação
-    summon_tickets = Column(Integer, default=0) # Tickets grátis ou ganhos em eventos
-    
-    # Sistema Anti-Frustração (Pity) genérico antigo (mantido por compatibilidade)
-    pity_counter = Column(Integer, default=0) 
-    
+
+    gold = Column(Integer, default=0)
+    crystals_premium = Column(Integer, default=0)   # Cristais de Éter (premium)
+    clan_coins = Column(Integer, default=0)          # Coins de Clã
+    summon_tickets = Column(Integer, default=0)      # Tickets de Invocação
+    spirit_tickets = Column(Integer, default=0)      # Tickets de Espírito (Guardião)
+    pity_counter = Column(Integer, default=0)        # Legado — mantido por compatibilidade
+
     player = relationship("Player", back_populates="wallet")
+
 
 class GachaBanner(Base):
     __tablename__ = "gacha_banners"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String) # Ex: "Baú da Vanguarda"
+    name = Column(String)
     description = Column(String)
-    faction_focus = Column(Enum(HeroFaction), nullable=True) # Se None, é o Baú Básico Fodder
+    faction_focus = Column(Enum(HeroFaction), nullable=True)
     cost_amount = Column(Integer, default=1)
-    cost_currency = Column(String, default="premium_aetherium") # "premium_aetherium" ou "summon_tickets"
+    cost_currency = Column(String, default="premium_aetherium")
     hard_pity_count = Column(Integer, default=100)
-    
+    soft_pity_start = Column(Integer, default=75)   # A partir daqui chance aumenta
+
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)     # None = permanente
+
 
 class PlayerBannerState(Base):
     __tablename__ = "player_banner_states"
-    
+
     id = Column(String, primary_key=True, default=generate_uuid)
     player_id = Column(String, ForeignKey("players.id"))
     banner_id = Column(String, ForeignKey("gacha_banners.id"))
-    
+
     pity_counter_sss = Column(Integer, default=0)
-    
+    guaranteed_next = Column(Boolean, default=False)  # 50/50 perdido = garantia na próxima
+
     player = relationship("Player")
     banner = relationship("GachaBanner")
+
+
+# =============================================================================
+# GUARDIÃO ESPIRITUAL
+# =============================================================================
+
+class GuardianSpirit(Base):
+    """Suporte passivo equipável — invocado com Spirit Tickets."""
+    __tablename__ = "guardian_spirits"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    player_id = Column(String, ForeignKey("players.id"), nullable=False)
+
+    name     = Column(String, nullable=False)
+    element  = Column(String, nullable=False)       # Fogo | Gelo | Sombra | Luz | Natureza
+    rarity   = Column(String, nullable=False)       # SSS | SS | S | A
+    level    = Column(Integer, default=1)
+
+    passive_name        = Column(String, nullable=False)
+    passive_description = Column(Text, nullable=False)
+
+    # Stat bonuses planos (somados ao time)
+    stat_hp  = Column(Integer, default=0)
+    stat_atk = Column(Integer, default=0)
+    stat_def = Column(Integer, default=0)
+    stat_spd = Column(Integer, default=0)
+
+    is_equipped = Column(Boolean, default=False)
+    obtained_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    player = relationship("Player", back_populates="guardian_spirits")
+
+
+# =============================================================================
+# EQUIPAMENTO
+# =============================================================================
+
+class Equipment(Base):
+    """Itens equipáveis em heróis — obtidos via campanha e boss."""
+    __tablename__ = "equipment"
+
+    id        = Column(String, primary_key=True, default=generate_uuid)
+    player_id = Column(String, ForeignKey("players.id"), nullable=False)
+    hero_id   = Column(String, ForeignKey("heroes.id"), nullable=True)  # None = no inventário
+
+    name      = Column(String, nullable=False)
+    slot      = Column(String, nullable=False)    # Weapon | Armor | Accessory | Relic
+    rarity    = Column(String, nullable=False)    # Lendário | Épico | Raro | Comum
+    level     = Column(Integer, default=1)
+    max_level = Column(Integer, default=10)
+
+    # Stats (nullable — nem todo equip tem todos)
+    stat_atk       = Column(Integer, nullable=True)
+    stat_def       = Column(Integer, nullable=True)
+    stat_hp        = Column(Integer, nullable=True)
+    stat_spd       = Column(Integer, nullable=True)
+    stat_crit_rate = Column(Float, nullable=True)   # Ex: 0.08 = 8%
+    stat_crit_dmg  = Column(Float, nullable=True)   # Ex: 0.30 = 30%
+
+    set_name  = Column(String, nullable=True)
+    set_bonus = Column(Text, nullable=True)
+
+    obtained_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    player = relationship("Player", back_populates="equipment_items")
+    hero   = relationship("Hero", back_populates="equipment_items")

@@ -9,8 +9,9 @@ class PlayerWalletResponse(BaseModel):
     player_id: str
     gold: int
     crystals_premium: int
-    guild_coins: int
+    clan_coins: int
     summon_tickets: int
+    spirit_tickets: int
     pity_counter: int
     
     class Config:

@@ -32,3 +32,10 @@ def claim_afk_box(player_id: str, db: Session = Depends(get_db)):
     """
     reward = crud_campaign.process_afk_rewards(db, player_id)
     return reward
+@router.post("/play", response_model=dict)
+def play_stage(player_id: str, stage_number: int, db: Session = Depends(get_db)):
+    """
+    Simula jogar uma fase. O jogador ganha gold, exp e se for a primeira vez,
+    avança seu progresso maximo. O drop de equipamento deverá ser chamado separadamente.
+    """
+    return crud_campaign.play_campaign_stage(db, player_id, stage_number)
